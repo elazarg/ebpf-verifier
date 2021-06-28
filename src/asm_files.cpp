@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <set>
 #include <sys/stat.h>
 
 #include "asm_files.hpp"
@@ -47,6 +48,24 @@ EbpfMapDescriptor* find_map_descriptor(int map_fd) {
     return nullptr;
 }
 
+bool is_map_section(const std::string& name) {
+    std::string maps_prefix = "maps/";
+    return name == "maps" || (name.length() > 5 && name.compare(0, maps_prefix.length(), maps_prefix) == 0);
+}
+
+// parse_maps_sections processes all maps sections in the provided ELF file by calling the platform-specific maps
+// parser. The section index of each maps section is inserted into section_indices. Maps sections are identified as any
+// section called "maps", or matching "maps/<map-name>".
+void parse_map_sections(const ebpf_verifier_options_t* options, const ebpf_platform_t* platform, const ELFIO::elfio& reader, std::vector<EbpfMapDescriptor>& map_descriptors, std::set<ELFIO::Elf_Half>& section_indices) {
+    for (ELFIO::Elf_Half i = 0; i < reader.sections.size(); ++i) {
+        auto s = reader.sections[i];
+        if (is_map_section(s->get_name())) {
+            platform->parse_maps_section(map_descriptors, s->get_data(), s->get_size(), platform, *options);
+            section_indices.insert(s->get_index());
+        }
+    }
+}
+
 vector<raw_program> read_elf(const std::string& path, const std::string& desired_section, const ebpf_verifier_options_t* options, const ebpf_platform_t* platform) {
     if (options == nullptr)
         options = &ebpf_verifier_default_options;
@@ -60,11 +79,9 @@ vector<raw_program> read_elf(const std::string& path, const std::string& desired
     }
 
     program_info info{platform};
+    std::set<ELFIO::Elf_Half> map_section_indices;
 
-    ELFIO::section* maps_section = reader.sections["maps"];
-    if (maps_section) {
-        platform->parse_maps_section(info.map_descriptors, maps_section->get_data(), maps_section->get_size(), platform, *options);
-    }
+    parse_map_sections(options, platform, reader, info.map_descriptors, map_section_indices);
 
     ELFIO::const_symbol_section_accessor symbols{reader, reader.sections[".symtab"]};
     auto read_reloc_value = [&symbols,platform](int symbol) -> size_t {
@@ -106,9 +123,9 @@ vector<raw_program> read_elf(const std::string& path, const std::string& desired
             ELFIO::Elf_Word type;
             ELFIO::Elf_Sxword addend;
 
-            // Below, only relocations of symbols located in the maps section are allowed,
-            // so if there are relocations there needs to be a "maps" section.
-            if (reloc.get_entries_num() && !maps_section) {
+            // Below, only relocations of symbols located in the map sections are allowed,
+            // so if there are relocations there needs to be a maps section.
+            if (reloc.get_entries_num() && !map_section_indices.size()) {
                 throw std::runtime_error(string("Can't find any maps sections in file ") + path);
             }
 
@@ -128,7 +145,7 @@ vector<raw_program> read_elf(const std::string& path, const std::string& desired
                                        symbol_section_index, symbol_other);
 
                     // Only perform relocation for symbols located in the maps section.
-                    if (symbol_section_index != maps_section->get_index()) {
+                    if (map_section_indices.find(symbol_section_index) == map_section_indices.end()) {
                         throw std::runtime_error(string("Unresolved external symbol " + symbol_name +
                                                         " at location " + std::to_string(offset / sizeof(ebpf_inst))));
                     }
