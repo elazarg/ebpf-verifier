@@ -54,6 +54,8 @@ class variable_t final {
 
   public:
     static void clear_thread_local_state();
+
+    static std::vector<variable_t> get_type_variables();
     static variable_t reg(data_kind_t, int);
     static variable_t cell_var(data_kind_t array, index_t offset, unsigned size);
     static variable_t map_value_size();

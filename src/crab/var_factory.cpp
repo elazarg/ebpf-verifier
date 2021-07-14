@@ -74,4 +74,17 @@ variable_t variable_t::meta_offset() { return make("meta_offset"); }
 variable_t variable_t::packet_size() { return make("packet_size"); }
 variable_t variable_t::instruction_count() { return make("instruction_count"); }
 
+static bool ends_with(const std::string& str, const std::string& suffix)
+{
+    return str.size() >= suffix.size() && 0 == str.compare(str.size()-suffix.size(), suffix.size(), suffix);
+}
+
+std::vector<variable_t> variable_t::get_type_variables() {
+    std::vector<variable_t> res;
+    for (const std::string& name: names) {
+        if (ends_with(name, ".type"))
+            res.push_back(make(name));
+    }
+    return res;
+}
 } // end namespace crab

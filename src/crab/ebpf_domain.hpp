@@ -287,6 +287,15 @@ class ebpf_domain_t final {
         }
     }
 
+    void forget_packet_pointers() {
+        using namespace dsl_syntax;
+        for (variable_t v : variable_t::get_type_variables()) {
+            // TODO: this is sufficient, but for clarity it may be useful to forget the offset and value too.
+           if (m_inv.intersect(v == T_PACKET))
+               m_inv -= v;
+        }
+    }
+
     void apply(NumAbsDomain& inv, binop_t op, variable_t x, variable_t y, const number_t& z, bool finite_width = false) {
         inv.apply(op, x, y, z);
         if (finite_width)
@@ -919,6 +928,11 @@ class ebpf_domain_t final {
             }
             }
         }
+
+        if (call.func == call.reallocate_packet) {
+            forget_packet_pointers();
+        }
+
         scratch_caller_saved_registers();
         auto r0 = reg_pack(R0_RETURN_VALUE);
         havoc(r0.value);

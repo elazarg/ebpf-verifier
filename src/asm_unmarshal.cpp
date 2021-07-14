@@ -298,6 +298,7 @@ struct Unmarshaller {
         Call res;
         res.func = imm;
         res.name = proto.name;
+        res.reallocate_packet = proto.reallocate_packet;
         res.returns_map = proto.return_type == EBPF_RETURN_TYPE_PTR_TO_MAP_VALUE_OR_NULL;
         std::array<ebpf_argument_type_t, 7> args = {{
             EBPF_ARGUMENT_TYPE_DONTCARE,
